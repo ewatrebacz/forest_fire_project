@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "self-adaptive SIS model"
+version = "1.0.0"
+description = "self-adaptive SIS model"
+authors = ["ZiveRael <papeernscal@gmail.com>", "ewatrebacz"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">3.12,<=3.13"
+pydantic = "^2.10.6"
+numpy = "^2.2.4"
+ipython = "^9.0.2"
+jupyterlab = "^4.4.0"
+seaborn = "^0.13.2"
+jupytext = "^1.17.0"
+scipy = "^1.15.2"
+networkx = "3.4.2"
+pyvis = "^0.3.2"
+jupyter-bokeh = "^4.0.5"
+nbconvert = "^7.16.6"
+ndlib = "^5.1.1"
+mypy = "^1.16.1"
+ruff = "^0.12.0"
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+exclude=["report/notebook"]
+
+[tool.jupytext.formats]
+"notebook/" = "ipynb"
+"script" = "py:percent"
