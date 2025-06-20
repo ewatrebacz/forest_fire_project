@@ -50,12 +50,6 @@ def plot_model_simulation(model, steps):
 
 
 # %%
-# x = nx.erdos_renyi_graph(10, 0.4)
-nx.draw(x, with_labels=True)
-# [i for i in x.neighbors(u) for u in [3, 4, 8]]
-[i for u in [3, 4, 8] for i in x.neighbors(u) if i >=4]
-
-# %%
 import networkx as nx
 import ndlib.models.ModelConfig as mc
 import ndlib.models.epidemics as ep
@@ -102,7 +96,7 @@ class StateSIS(Enum):
 
 class ParamsSIS(BaseModel):
     beta: float = Field(..., gt=0, lt=1)
-    gamma: float = Field(..., gt=0, lt=1)
+    gamma: float = Field(..., gt=0, le=1)
 
 
 
@@ -213,10 +207,6 @@ def save_animation(ani: FuncAnimation, filename: str, writer: animation.FFMpegWr
 # ### Test
 
 # %%
-x = nx.erdos_renyi_graph(20, 0.4)
-nx.draw(x, with_labels=True)
-
-# %%
 fig, axs = plt.subplots(1, 2, figsize = (10,5))
 
 g = nx.erdos_renyi_graph(1000, 0.12)
@@ -272,16 +262,16 @@ class StateSAIS(Enum):
 class ParamsSAIS(BaseModel):
     beta: float = Field(..., gt=0, lt=1)
     beta_a: float = Field(..., gt=0, lt=1)
-    delta: float = Field(..., gt=0, lt=1)
+    delta: float = Field(..., gt=0, le=1)
     kappa: float = Field(..., gt=0, lt=1)
 
 
 # %%
 class SAIS:
     state_color_mapping = {
-        StateAlertSpreadingSAIS.suspectible: "blue",
-        StateAlertSpreadingSAIS.infected: "red",
-        StateAlertSpreadingSAIS.alert: "yellow",
+        StateSAIS.suspectible: "blue",
+        StateSAIS.infected: "red",
+        StateSAIS.alert: "yellow",
     }
     
     def __init__(
@@ -297,11 +287,11 @@ class SAIS:
     def init_state(self, I0: int, seed: int):
         random.seed(seed)
         np.random.seed(seed=seed)
-        nx.set_node_attributes(self.graph, StateAlertSpreadingSAIS.suspectible, "state")
+        nx.set_node_attributes(self.graph, StateSAIS.suspectible, "state")
         nx.set_node_attributes(
             self.graph,
             {
-                node: {"state": StateAlertSpreadingSAIS.infected}
+                node: {"state": StateSAIS.infected}
                 for node in random.sample(list(self.graph.nodes), k=I0)
             }
         )
@@ -309,19 +299,19 @@ class SAIS:
     def _update_state(self):
         """Asynchronous updates considered."""
         node_states = nx.get_node_attributes(self.graph, "state")
-        infected_nodes = [n for n, state in node_states.items() if state == StateAlertSpreadingSAIS.infected]
+        infected_nodes = [n for n, state in node_states.items() if state == StateSAIS.infected]
         next_states = {}
 
         trans_IS = np.random.random(len(infected_nodes)) <= self.params.delta
-        recovered = {node: StateAlertSpreadingSAIS.suspectible for node, is_change in zip(infected_nodes, trans_IS) if is_change}
-        dangered_suscteptible = [v for u in infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAIS.suspectible]
+        recovered = {node: StateSAIS.suspectible for node, is_change in zip(infected_nodes, trans_IS) if is_change}
+        dangered_suscteptible = [v for u in infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateSAIS.suspectible]
         trans_SA = np.random.random(len(dangered_suscteptible)) <= self.params.kappa
-        alerted = {node: StateAlertSpreadingSAIS.alert for node, is_change in zip(dangered_suscteptible, trans_SA) if is_change}
+        alerted = {node: StateSAIS.alert for node, is_change in zip(dangered_suscteptible, trans_SA) if is_change}
         trans_SI = np.random.random(len(dangered_suscteptible)) <= self.params.beta
-        infected = {node: StateAlertSpreadingSAIS.infected for node, is_change in zip(dangered_suscteptible, trans_SI) if is_change}
-        dangered_alert = [v for u in infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAIS.alert]
+        infected = {node: StateSAIS.infected for node, is_change in zip(dangered_suscteptible, trans_SI) if is_change}
+        dangered_alert = [v for u in infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateSAIS.alert]
         trans_AI = np.random.random(len(dangered_alert)) <= self.params.beta_a
-        infected_in_alert = {node: StateAlertSpreadingSAIS.infected for node, is_change in zip(dangered_alert, trans_AI) if is_change}
+        infected_in_alert = {node: StateSAIS.infected for node, is_change in zip(dangered_alert, trans_AI) if is_change}
 
         next_states.update(recovered)
         #Infections should overwrite alerts
@@ -343,13 +333,13 @@ class SAIS:
             self._update_state()
             states = nx.get_node_attributes(self.graph, "state").values()
             statistics["infected_count"].append(
-                sum(1 for s in states if s == StateAlertSpreadingSAIS.infected)
+                sum(1 for s in states if s == StateSAIS.infected)
             )
             statistics["suspectible_count"].append(
-                sum(1 for s in states if s == StateAlertSpreadingSAIS.suspectible)
+                sum(1 for s in states if s == StateSAIS.suspectible)
             )
             statistics["alert_count"].append(
-                sum(1 for s in states if s == StateAlertSpreadingSAIS.alert)
+                sum(1 for s in states if s == StateSAIS.alert)
             )
             step_no += 1
             is_finished = SAIS.is_finished(self.graph)
@@ -359,7 +349,7 @@ class SAIS:
     def is_finished(graph: nx.Graph) -> bool:
         states = nx.get_node_attributes(graph, "state").values()
         total_infected = (
-                sum(1 for s in states if s == StateAlertSpreadingSAIS.infected)
+                sum(1 for s in states if s == StateSAIS.infected)
         )
         return len(graph) == total_infected or total_infected == 0
 
@@ -399,15 +389,76 @@ params = ParamsSAIS(
 )
 I0=50
 
+g = nx.erdos_renyi_graph(320, 0.2)
+params = ParamsSAIS(
+    beta=0.03,
+    beta_a=0.03,
+    delta=1,
+    kappa=0.05,
+)
+I0=int(320*0.02)
+
+
+
 # %%
 model = SAIS(g, params)
 model.init_state(I0=I0, seed=1)
 stats = model.run_simulation(200)
 
 # %%
+fig, ax = plt.subplots(figsize = (10,5))
+
+g1 = g.copy()
+
+#Benchmark
+model = ep.SISModel(g)
+cfg = mc.Configuration()
+cfg.add_model_parameter('beta', params.beta)
+cfg.add_model_parameter('lambda', params.delta)
+cfg.add_model_parameter("fraction_infected", 0.02)
+model.set_initial_status(cfg)
+iterations = model.iteration_bunch(200)
+infected = [it['node_count'][1] / 320 for it in iterations]  # 1 = infected state
+ax.plot(infected, label='SIS[NdLib]')
+ax.set_xlabel('Iterations')
+ax.set_ylabel('Number of Infected Nodes')
+ax.set_title('SIS Model: Infected Over Time [NDlib]')
+ax.grid()
+
+
+#Defined
+model = SAIS(g, params)
+model.init_state(I0=I0, seed=1)
+stats = model.run_simulation(200)
+ax.plot(np.array(stats["infected_count"])/320, label='SAIS')
+
+paramsSIS = ParamsSIS(beta=0.03, gamma=1)
+model = SIS(g, paramsSIS)
+model.init_state(I0=I0, seed=1)
+stats = model.run_simulation(200)
+ax.plot(np.array(stats["infected_count"])/320, label='SIS')
+plt.legend()
+plt.grid(True)
+
+
+# %%
 fig, axs = plt.subplots(figsize=(5,5))
 #Defined
-healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) 
+stats["infected_count"]
+axs.plot(np.array(stats["infected_count"])/320, label='Infected')
+axs.set_xlabel('Iterations')
+axs.set_ylabel('Number of Infected Nodes')
+axs.set_title('SAIS Model: Infected Over Time [My implelemtation]')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"])
 stats["infected_count"]
 axs.plot(stats["infected_count"], label='Infected')
 axs.plot(healthy, label='Not Infected')
@@ -586,3 +637,219 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
+
+# %% [markdown]
+# # Alert Spreading SAICS
+
+# %%
+class StateAlertSpreadingSAICS(Enum):
+    suspectible = auto()
+    infected = auto()
+    alert = auto()
+    coruptor = auto()
+
+class ParamsAlertSpreadingSAICS(BaseModel):
+    beta: float = Field(..., gt=0, lt=1)
+    beta_a: float = Field(..., ge=0, lt=1)
+    beta_prim: float = Field(..., ge=0, lt=1)
+    beta_a_prim: float = Field(..., ge=0, lt=1)
+    delta: float = Field(..., gt=0, lt=1)
+    kappa_s: float = Field(..., gt=0, lt=1)
+    kappa_a: float = Field(..., gt=0, lt=1)
+
+
+# %%
+class AlertSpreadingSAICS:
+    state_color_mapping = {
+        StateAlertSpreadingSAICS.suspectible: "blue",
+        StateAlertSpreadingSAICS.infected: "red",
+        StateAlertSpreadingSAICS.alert: "yellow",
+        StateAlertSpreadingSAICS.coruptor: "gray",
+    }
+    
+    def __init__(
+        self,
+        graph: nx.Graph,
+        params: ParamsAlertSpreadingSAICS,
+        pos_seed: int = 3
+    ) -> None:
+        self.graph = graph
+        self.pos = nx.spring_layout(self.graph, seed=pos_seed)
+        self.params = params
+    
+    def init_state(self, I0: int, seed: int):
+        random.seed(seed)
+        np.random.seed(seed=seed)
+        nx.set_node_attributes(self.graph, StateAlertSpreadingSAICS.suspectible, "state")
+        nx.set_node_attributes(
+            self.graph,
+            {
+                node: {"state": StateAlertSpreadingSAICS.infected}
+                for node in random.sample(list(self.graph.nodes), k=I0)
+            }
+        )
+    
+    def _update_state(self):
+        """Asynchronous updates considered."""
+        node_states = nx.get_node_attributes(self.graph, "state")
+        infected_nodes = [n for n, state in node_states.items() if state == StateAlertSpreadingSAICS.infected]
+        coruptor_nodes = [n for n, state in node_states.items() if state == StateAlertSpreadingSAICS.coruptor]
+        general_infected_nodes = infected_nodes + coruptor_nodes
+        alerted_nodes = [n for n, state in node_states.items() if state == StateAlertSpreadingSAICS.alert]
+        next_states = {}
+
+        trans_IS = np.random.random(len(infected_nodes)) <= self.params.delta
+        recovered = {node: StateAlertSpreadingSAICS.suspectible for node, is_change in zip(infected_nodes + coruptor_nodes, trans_IS) if is_change}
+
+        dangered_suscteptible = [v for u in general_infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.suspectible]
+        throw_suspectible = np.random.random(len(dangered_suscteptible))
+        trans_SC = throw_suspectible <= self.params.beta_prim
+        corupted = {node: StateAlertSpreadingSAICS.coruptor for node, is_change in zip(dangered_suscteptible, trans_SC) if is_change}
+        trans_SI =  (self.params.beta_prim < throw_suspectible) & (throw_suspectible <= self.params.beta)
+        infected = {node: StateAlertSpreadingSAICS.infected for node, is_change in zip(dangered_suscteptible, trans_SI) if is_change}
+
+
+        trans_SA = np.random.random(len(dangered_suscteptible)) <= self.params.kappa_s
+        alerted_by_I = {node: StateAlertSpreadingSAICS.alert for node, is_change in zip(dangered_suscteptible, trans_SA) if is_change}
+        
+        neighbours_of_alerted = [v for u in alerted_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.alert]
+        trans_SA2 = np.random.random(len(dangered_suscteptible)) <= self.params.kappa_a
+        alerted_by_A = {node: StateAlertSpreadingSAICS.alert for node, is_change in zip(neighbours_of_alerted, trans_SA2) if is_change}
+        
+        dangered_alert = [v for u in general_infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.alert]
+        throw_alert = np.random.random(len(dangered_alert))
+        trans_AC = throw_alert <= self.params.beta_a_prim
+        corupted_in_alert = {node: StateAlertSpreadingSAICS.coruptor for node, is_change in zip(dangered_alert, trans_AC) if is_change}
+        trans_AI = (self.params.beta_a_prim < throw_alert) & (throw_alert <= self.params.beta_a)
+        infected_in_alert = {node: StateAlertSpreadingSAICS.infected for node, is_change in zip(dangered_alert, trans_AI) if is_change}
+
+        next_states.update(recovered)
+        #Infections should overwrite alerts
+        next_states.update(alerted_by_I)
+        next_states.update(alerted_by_A)
+        next_states.update(infected)
+        next_states.update(infected_in_alert)
+        next_states.update(corupted)
+        next_states.update(corupted_in_alert)
+
+        nx.set_node_attributes(self.graph, {node: {"state": state} for node, state in next_states.items()})
+
+
+    def run_simulation(self, max_steps: int):
+        statistics = {
+            "infected_count": [],
+            "suspectible_count": [],
+            "alert_count": [],
+            "corrupted_count": [],
+        }
+        is_finished = False
+        step_no = 0
+        while not is_finished and step_no < max_steps:
+            self._update_state()
+            states = nx.get_node_attributes(self.graph, "state").values()
+            statistics["infected_count"].append(
+                sum(1 for s in states if s == StateAlertSpreadingSAICS.infected)
+            )
+            statistics["suspectible_count"].append(
+                sum(1 for s in states if s == StateAlertSpreadingSAICS.suspectible)
+            )
+            statistics["alert_count"].append(
+                sum(1 for s in states if s == StateAlertSpreadingSAICS.alert)
+            )
+            statistics["corrupted_count"].append(
+                sum(1 for s in states if s == StateAlertSpreadingSAICS.coruptor)
+            )
+            step_no += 1
+            is_finished = AlertSpreadingSAICS.is_finished(self.graph)
+        return statistics
+
+    @staticmethod
+    def is_finished(graph: nx.Graph) -> bool:
+        states = nx.get_node_attributes(graph, "state").values()
+        total_infected = (
+                sum(1 for s in states if s in (StateAlertSpreadingSAICS.infected, StateAlertSpreadingSAICS.coruptor))
+        )
+        return len(graph) == total_infected or total_infected == 0
+
+
+
+    def _get_nodes_state_mapping(self) -> list[int]:
+        return [self.state_color_mapping[s] for s in nx.get_node_attributes(self.graph,'state').values()]        
+    
+    def _plot_current_state(self, ax):
+        ax.clear()
+        nx.draw_networkx(
+            self.graph, 
+            pos=self.pos, 
+            with_labels=False, 
+            node_color=self._get_nodes_state_mapping(),
+            node_size=7,
+            edge_color='gray',
+            width=0.3,
+            alpha=0.8,
+            ax=ax
+        )
+        ax.set_title(f"StateAlertSpreadingSAICS model on the graph")
+        ax.set_axis_off()
+
+
+
+# %% [markdown]
+# ## Tests
+
+# %%
+g = nx.erdos_renyi_graph(1000, 0.15)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.001,
+    beta_prim=0.00002,
+    beta_a=0.0005,
+    beta_a_prim=0.00001,
+    delta=0.05,
+    kappa_a=0.04,
+    kappa_s=0.06,
+)
+I0=50
+
+# %%
+model = AlertSpreadingSAICS(g, params)
+model.init_state(I0=I0, seed=1)
+stats = model.run_simulation(200)
+
+# %%
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) 
+infected = np.array(stats["infected_count"]) + np.array(stats["corrupted_count"])
+stats["infected_count"]
+axs.plot(infected, label='Infected')
+axs.plot(healthy, label='Not Infected')
+axs.set_xlabel('Iterations')
+axs.set_ylabel('Number of Infected Nodes')
+axs.set_title('AlertSpreadingSAICS Model: Infected Over Time [My implelemtation]')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+g = nx.erdos_renyi_graph(40, 0.1)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.03,
+    beta_prim=0.005,
+    beta_a=0.03,
+    beta_a_prim=0.0,
+    delta=0.05,
+    kappa_a=0.01,
+    kappa_s=0.03,
+)
+I0=3
+model = AlertSpreadingSAICS(g, params)
+model.init_state(I0=I0, seed=3)
+
+# plot_state(model, 2)
+save_animation(
+    plot_model_simulation(model, steps=100),
+    "AlertSpreadingSAICS.mp4"
+
+)
