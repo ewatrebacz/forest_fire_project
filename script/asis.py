@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from pydantic import BaseModel, Field
 from enum import auto, Enum
 import random 
+import pandas as pd
 
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
@@ -633,14 +634,14 @@ class StateAlertSpreadingSAICS(Enum):
     coruptor = auto()
 
 class ParamsAlertSpreadingSAICS(BaseModel):
-    beta: float = Field(..., gt=0, lt=1)
+    beta: float = Field(..., ge=0, lt=1)
     beta_a: float = Field(..., ge=0, lt=1)
     beta_prim: float = Field(..., ge=0, lt=1)
     beta_a_prim: float = Field(..., ge=0, lt=1)
     delta: float = Field(..., ge=0, le=1)
     delta_a: float = Field(..., ge=0, le=1)
-    kappa_s: float = Field(..., gt=0, lt=1)
-    kappa_a: float = Field(..., gt=0, lt=1)
+    kappa_s: float = Field(..., ge=0, lt=1)
+    kappa_a: float = Field(..., ge=0, lt=1)
 
 
 # %%
@@ -700,8 +701,8 @@ class AlertSpreadingSAICS:
         trans_SA = np.random.random(len(dangered_suscteptible)) <= self.params.kappa_s
         alerted_by_I = {node: StateAlertSpreadingSAICS.alert for node, is_change in zip(dangered_suscteptible, trans_SA) if is_change}
         
-        neighbours_of_alerted = [v for u in alerted_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.alert]
-        trans_SA2 = np.random.random(len(dangered_suscteptible)) <= self.params.kappa_a
+        neighbours_of_alerted = [v for u in alerted_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.suspectible]
+        trans_SA2 = np.random.random(len(neighbours_of_alerted)) <= self.params.kappa_a
         alerted_by_A = {node: StateAlertSpreadingSAICS.alert for node, is_change in zip(neighbours_of_alerted, trans_SA2) if is_change}
         
         dangered_alert = [v for u in general_infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.alert]
@@ -805,17 +806,60 @@ model = AlertSpreadingSAICS(g, params)
 model.init_state(I0=I0, seed=1)
 stats = model.run_simulation(200)
 
+    # %%
+    fig, axs = plt.subplots(figsize=(5,5))
+    #Defined
+    healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) 
+    infected = np.array(stats["infected_count"]) + np.array(stats["corrupted_count"])
+    stats["infected_count"]
+    axs.plot(infected, label='Infected')
+    axs.plot(healthy, label='Not Infected')
+    axs.set_xlabel('Iterations')
+    axs.set_ylabel('Number of Infected Nodes')
+    axs.set_title('AlertSpreadingSAICS Model: Infected Over Time [My implelemtation]')
+    axs.grid()
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
 # %%
+g = nx.erdos_renyi_graph(320, 0.2)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.03,
+    beta_prim=0.00,
+    beta_a=0.01,
+    beta_a_prim=0.0,
+    delta=1,
+    delta_a=0,
+    kappa_a=0.0,
+    kappa_s=0.05,
+)
+I0=int(320 * 0.2)
+
+# %%
+mcs = 50
+total_stats = pd.DataFrame()
+for idx in range(mcs):
+    g = nx.erdos_renyi_graph(320, 0.2)
+    model = AlertSpreadingSAICS(g, params)
+    model.init_state(I0=I0, seed=3)
+    stats = pd.DataFrame(model.run_simulation(200))
+    stats["steps"] = np.arange(len(stats))
+    total_stats = pd.concat([total_stats, stats], ignore_index=True)
+
+# %%
+df = total_stats.groupby("steps").mean()
 fig, axs = plt.subplots(figsize=(5,5))
 #Defined
-healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) 
-infected = np.array(stats["infected_count"]) + np.array(stats["corrupted_count"])
+healthy =(np.array(df["suspectible_count"]) + df["alert_count"])  / len(g)
+infected = (df["infected_count"] + df["corrupted_count"]) / len(g)
 stats["infected_count"]
 axs.plot(infected, label='Infected')
 axs.plot(healthy, label='Not Infected')
-axs.set_xlabel('Iterations')
-axs.set_ylabel('Number of Infected Nodes')
-axs.set_title('AlertSpreadingSAICS Model: Infected Over Time [My implelemtation]')
+axs.set_xlabel('Dimensionless Time, $\\bar{t}$')
+axs.set_ylabel('Population Fraction')
+axs.set_title('Infection dynamics for AlertSpreadingSAICS')
 axs.grid()
 plt.legend()
 plt.grid(True)
@@ -823,7 +867,105 @@ plt.show()
 
 
 # %%
-g = nx.random_regular_graph(5, 1000)
+g = nx.erdos_renyi_graph(320, 0.2)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.03,
+    beta_prim=0.00,
+    beta_a=0.01,
+    beta_a_prim=0.0,
+    delta=1,
+    delta_a=0,
+    kappa_a=0.9,
+    kappa_s=0.05,
+)
+I0=int(320 * 0.2)
+
+mcs = 50
+total_stats = pd.DataFrame()
+for idx in range(mcs):
+    g = nx.erdos_renyi_graph(320, 0.2)
+    model = AlertSpreadingSAICS(g, params)
+    model.init_state(I0=I0, seed=3)
+    stats = pd.DataFrame(model.run_simulation(200))
+    stats["steps"] = np.arange(len(stats))
+    total_stats = pd.concat([total_stats, stats], ignore_index=True)
+
+df = total_stats.groupby("steps").mean()
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =(np.array(df["suspectible_count"]) + df["alert_count"])  / len(g)
+infected = (df["infected_count"] + df["corrupted_count"]) / len(g)
+axs.plot(infected, label='Infected')
+axs.plot(healthy, label='Not Infected')
+axs.set_xlabel('Dimensionless Time, $\\bar{t}$')
+axs.set_ylabel('Population Fraction')
+axs.set_title('Infection dynamics for AlertSpreadingSAICS')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+g = nx.erdos_renyi_graph(320, 0.2)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.03,
+    beta_prim=0.00,
+    beta_a=0.01,
+    beta_a_prim=0.0,
+    delta=1,
+    delta_a=0,
+    kappa_a=0.5,
+    kappa_s=0.05,
+)
+I0=int(320 * 0.02)
+
+mcs = 50
+total_stats = pd.DataFrame()
+for idx in range(mcs):
+    g = nx.erdos_renyi_graph(320, 0.2)
+    model = AlertSpreadingSAICS(g, params)
+    model.init_state(I0=I0, seed=3)
+    stats = pd.DataFrame(model.run_simulation(200))
+    stats["steps"] = np.arange(len(stats))
+    total_stats = pd.concat([total_stats, stats], ignore_index=True)
+
+df = total_stats.groupby("steps").mean()
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =(np.array(df["suspectible_count"]) + df["alert_count"])  / len(g)
+infected = (df["infected_count"] + df["corrupted_count"]) / len(g)
+axs.plot(infected, label='Infected')
+axs.plot(healthy, label='Not Infected')
+axs.set_xlabel('Dimensionless Time, $\\bar{t}$')
+axs.set_ylabel('Population Fraction')
+axs.set_title('Infection dynamics for AlertSpreadingSAICS')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =(np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) ) / len(g)
+infected = (np.array(stats["infected_count"]) + np.array(stats["corrupted_count"])) / len(g)
+stats["infected_count"]
+axs.plot(infected, label='Infected')
+axs.plot(healthy, label='Not Infected')
+axs.set_xlabel('Dimensionless Time, $\\bar{t}$')
+axs.set_ylabel('Population Fraction')
+axs.set_title('Infection dynamics for AlertSpreadingSAICS')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+g = nx.watts_strogatz_graph(1000, k=4, p=10)
+g = nx.random_regular_graph(3, 1000)
 params = ParamsAlertSpreadingSAICS(
     beta=0.015,
     beta_prim=0.01,
