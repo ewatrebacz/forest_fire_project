@@ -7,9 +7,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.17.2
 #   kernelspec:
-#     display_name: self-adaptive_sis_model-HkBZS_AX-py3.12
+#     display_name: A-SIS
 #     language: python
-#     name: python3
+#     name: a-sis
 # ---
 
 # %% [markdown]
@@ -271,7 +271,7 @@ class SAIS:
     state_color_mapping = {
         StateSAIS.suspectible: "blue",
         StateSAIS.infected: "red",
-        StateSAIS.alert: "yellow",
+        StateSAIS.alert: "orange",
     }
     
     def __init__(
@@ -455,22 +455,6 @@ plt.grid(True)
 plt.show()
 
 
-# %%
-fig, axs = plt.subplots(figsize=(5,5))
-#Defined
-healthy =np.array(stats["suspectible_count"]) + np.array(stats["alert_count"])
-stats["infected_count"]
-axs.plot(stats["infected_count"], label='Infected')
-axs.plot(healthy, label='Not Infected')
-axs.set_xlabel('Iterations')
-axs.set_ylabel('Number of Infected Nodes')
-axs.set_title('SAIS Model: Infected Over Time [My implelemtation]')
-axs.grid()
-plt.legend()
-plt.grid(True)
-plt.show()
-
-
 # %% [markdown]
 # # Alert spreading SAIS
 
@@ -493,7 +477,7 @@ class AlertSpreadingSAIS:
     state_color_mapping = {
         StateSAIS.suspectible: "blue",
         StateSAIS.infected: "red",
-        StateSAIS.alert: "yellow",
+        StateSAIS.alert: "orange",
     }
     
     def __init__(
@@ -653,7 +637,8 @@ class ParamsAlertSpreadingSAICS(BaseModel):
     beta_a: float = Field(..., ge=0, lt=1)
     beta_prim: float = Field(..., ge=0, lt=1)
     beta_a_prim: float = Field(..., ge=0, lt=1)
-    delta: float = Field(..., gt=0, lt=1)
+    delta: float = Field(..., ge=0, le=1)
+    delta_a: float = Field(..., ge=0, le=1)
     kappa_s: float = Field(..., gt=0, lt=1)
     kappa_a: float = Field(..., gt=0, lt=1)
 
@@ -663,7 +648,7 @@ class AlertSpreadingSAICS:
     state_color_mapping = {
         StateAlertSpreadingSAICS.suspectible: "blue",
         StateAlertSpreadingSAICS.infected: "red",
-        StateAlertSpreadingSAICS.alert: "yellow",
+        StateAlertSpreadingSAICS.alert: "orange",
         StateAlertSpreadingSAICS.coruptor: "gray",
     }
     
@@ -698,8 +683,11 @@ class AlertSpreadingSAICS:
         alerted_nodes = [n for n, state in node_states.items() if state == StateAlertSpreadingSAICS.alert]
         next_states = {}
 
-        trans_IS = np.random.random(len(infected_nodes)) <= self.params.delta
-        recovered = {node: StateAlertSpreadingSAICS.suspectible for node, is_change in zip(infected_nodes + coruptor_nodes, trans_IS) if is_change}
+        throw_recovery = np.random.random(len(infected_nodes))
+        trans_IA = throw_recovery <= self.params.delta_a
+        recovered_alerted = {node: StateAlertSpreadingSAICS.alert for node, is_change in zip(infected_nodes, trans_IA) if is_change}
+        trans_IS = (self.params.delta_a < throw_recovery) & (throw_recovery <= self.params.delta)
+        recovered = {node: StateAlertSpreadingSAICS.suspectible for node, is_change in zip(infected_nodes, trans_IS) if is_change}
 
         dangered_suscteptible = [v for u in general_infected_nodes for v in self.graph.neighbors(u) if node_states[v] == StateAlertSpreadingSAICS.suspectible]
         throw_suspectible = np.random.random(len(dangered_suscteptible))
@@ -724,6 +712,7 @@ class AlertSpreadingSAICS:
         infected_in_alert = {node: StateAlertSpreadingSAICS.infected for node, is_change in zip(dangered_alert, trans_AI) if is_change}
 
         next_states.update(recovered)
+        next_states.update(recovered_alerted)
         #Infections should overwrite alerts
         next_states.update(alerted_by_I)
         next_states.update(alerted_by_A)
@@ -783,7 +772,7 @@ class AlertSpreadingSAICS:
             pos=self.pos, 
             with_labels=False, 
             node_color=self._get_nodes_state_mapping(),
-            node_size=7,
+            node_size=15,
             edge_color='gray',
             width=0.3,
             alpha=0.8,
@@ -805,6 +794,7 @@ params = ParamsAlertSpreadingSAICS(
     beta_a=0.0005,
     beta_a_prim=0.00001,
     delta=0.05,
+    delta_a=0.01,
     kappa_a=0.04,
     kappa_s=0.06,
 )
@@ -833,23 +823,62 @@ plt.show()
 
 
 # %%
-g = nx.erdos_renyi_graph(40, 0.1)
+g = nx.random_regular_graph(5, 1000)
 params = ParamsAlertSpreadingSAICS(
-    beta=0.03,
-    beta_prim=0.005,
-    beta_a=0.03,
+    beta=0.015,
+    beta_prim=0.01,
+    beta_a=0.005,
     beta_a_prim=0.0,
-    delta=0.05,
-    kappa_a=0.01,
-    kappa_s=0.03,
+    delta=0.01,
+    delta_a=0.01,
+    kappa_a=0.003,
+    kappa_s=0.001,
+)
+I0=3
+
+# %%
+model = AlertSpreadingSAICS(g, params)
+model.init_state(I0=I0, seed=3)
+stats = model.run_simulation(500)
+
+# %%
+fig, axs = plt.subplots(figsize=(5,5))
+#Defined
+healthy =(np.array(stats["suspectible_count"]) + np.array(stats["alert_count"]) ) / len(g)
+infected = (np.array(stats["infected_count"]) + np.array(stats["corrupted_count"])) / len(g)
+stats["infected_count"]
+axs.plot(infected, label='Infected')
+axs.plot(healthy, label='Not Infected')
+axs.set_xlabel('Dimensionless Time, $\\bar{t}$')
+axs.set_ylabel('Population Fraction')
+axs.set_title('Infection dynamics for AlertSpreadingSAICS')
+axs.grid()
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# %%
+g = nx.random_regular_graph(3, 20)
+params = ParamsAlertSpreadingSAICS(
+    beta=0.15,
+    beta_prim=0.1,
+    beta_a=0.05,
+    beta_a_prim=0.0,
+    delta=0.1,
+    delta_a=0.1,
+    kappa_a=0.03,
+    kappa_s=0.1,
 )
 I0=3
 model = AlertSpreadingSAICS(g, params)
 model.init_state(I0=I0, seed=3)
 
 # plot_state(model, 2)
-save_animation(
-    plot_model_simulation(model, steps=100),
-    "AlertSpreadingSAICS.mp4"
+# save_animation(
+#     plot_model_simulation(model, steps=200),
+#     "AlertSpreadingSAICS.mp4"
 
-)
+# )
+
+# %%
